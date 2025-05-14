@@ -6,3 +6,4 @@ bp = Blueprint("inner_api", __name__, url_prefix="/inner/api")
 api = ExternalApi(bp)
 
 from .workspace import workspace
+from .dev import dev_workspace, dev_account, dev_init_update
