@@ -32,6 +32,7 @@ from services.billing_service import BillingService
 from services.errors.account import AccountRegisterError
 from services.errors.workspace import WorkSpaceNotAllowedCreateError
 from services.feature_service import FeatureService
+from services.pbc_service import PbcService
 
 
 class LoginApi(Resource):
@@ -95,6 +96,49 @@ class LoginApi(Resource):
 
         token_pair = AccountService.login(account=account, ip_address=extract_remote_ip(request))
         AccountService.reset_login_error_rate_limit(args["email"])
+        return {"result": "success", "data": token_pair.model_dump()}
+
+
+class TokenLoginApi(Resource):
+    """Resource for user login."""
+
+    @setup_required
+    def post(self):
+        """Authenticate user and login."""
+        parser = reqparse.RequestParser()
+        parser.add_argument("token", type=str, required=True, location="args")
+        parser.add_argument("language", type=str, required=False, default="en-US", location="json")
+        args = parser.parse_args()
+
+        if args["language"] is not None and args["language"] == "zh-Hans":
+            language = "zh-Hans"
+        else:
+            language = "en-US"
+
+        try:
+            res = PbcService.parse_token(args.get("token"))
+            # 这里不需要再次验证账号密码了，直接根据用户名获取用户生成access token和refresh token返回即可
+            # account = AccountService.authenticate_name(res["username"], res["password"])
+            account = AccountService.get_user_through_name(res["data"]["sysUser"]["username"])
+        except services.errors.account.AccountLoginError:
+            raise AccountBannedError()
+
+        except services.errors.account.AccountNotFoundError:
+            if FeatureService.get_system_features().is_allow_register:
+                token = AccountService.send_reset_password_email(email=args["email"], language=language)
+                return {"result": "fail", "data": token, "code": "account_not_found"}
+            else:
+                raise AccountNotFound()
+        # SELF_HOSTED only have one workspace
+        tenants = TenantService.get_join_tenants(account)
+        if len(tenants) == 0:
+            return {
+                "result": "fail",
+                "data": "workspace not found, please contact system admin to invite you to join in a workspace",
+            }
+
+        token_pair = AccountService.login(account=account, ip_address=extract_remote_ip(request))
+        # AccountService.reset_login_error_rate_limit(args["email"])
         return {"result": "success", "data": token_pair.model_dump()}
 
 
@@ -234,6 +278,7 @@ class RefreshTokenApi(Resource):
 
 
 api.add_resource(LoginApi, "/login")
+api.add_resource(TokenLoginApi, "/token-login")
 api.add_resource(LogoutApi, "/logout")
 api.add_resource(EmailCodeLoginSendEmailApi, "/email-code-login")
 api.add_resource(EmailCodeLoginApi, "/email-code-login/validity")

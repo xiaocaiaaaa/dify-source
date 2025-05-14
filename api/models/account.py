@@ -197,6 +197,7 @@ class Tenant(db.Model):  # type: ignore[name-defined]
 
     id = db.Column(StringUUID, server_default=db.text("uuid_generate_v4()"))
     name = db.Column(db.String(255), nullable=False)
+    dept_id = db.Column(db.String(255), nullable=True)
     encrypt_public_key = db.Column(db.Text)
     plan = db.Column(db.String(255), nullable=False, server_default=db.text("'basic'::character varying"))
     status = db.Column(db.String(255), nullable=False, server_default=db.text("'normal'::character varying"))
