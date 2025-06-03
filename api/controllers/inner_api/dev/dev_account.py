@@ -6,7 +6,7 @@ from flask_restful import Resource, fields, marshal, reqparse
 from constants.languages import languages
 from controllers.console.wraps import setup_required
 from controllers.inner_api import api
-from controllers.inner_api.wraps import inner_api_only
+from controllers.inner_api.wraps import enterprise_inner_api_only
 from libs.helper import TimestampField
 from models.account import Account
 from services.account_service import AccountService, TenantService
@@ -24,7 +24,7 @@ class CreateAccountApi(Resource):
     default_password = os.environ.get("DEFAULT_PASSWORD", "DEFAULT_PASSWORD")
 
     @setup_required
-    @inner_api_only
+    @enterprise_inner_api_only
     def post(self):
         # 使用传参username创建用户，不做任何关联
         parser = reqparse.RequestParser()
@@ -52,7 +52,7 @@ class CreateAccountApi(Resource):
 class UpdateAccountApi(Resource):
     # 把用户从对应工作空间解绑
     @setup_required
-    @inner_api_only
+    @enterprise_inner_api_only
     def post(self):
         parser = reqparse.RequestParser()
         parser.add_argument('dept_id', type=str, required=True, location='json')
@@ -78,7 +78,7 @@ class UpdateAccountApi(Resource):
 
 class AccountApi(Resource):
     @setup_required
-    @inner_api_only
+    @enterprise_inner_api_only
     def get(self, name):
         account = AccountService.get_user_through_name(name)
         if account is None:
@@ -95,7 +95,7 @@ class AccountApi(Resource):
         }, 200
 
     @setup_required
-    @inner_api_only
+    @enterprise_inner_api_only
     def delete(self, name):
         account = AccountService.get_user_through_name(name)
         if account is None:
@@ -111,7 +111,7 @@ class AccountApi(Resource):
 
 class QueryAccountListApi(Resource):
     @setup_required
-    @inner_api_only
+    @enterprise_inner_api_only
     def get(self):
         accounts = AccountService.get_all_accounts()
         return {

@@ -9,7 +9,7 @@ from tenacity import retry, retry_if_exception_type, stop_before_delay, wait_fix
 from constants.languages import languages
 from controllers.console.wraps import setup_required
 from controllers.inner_api import api
-from controllers.inner_api.wraps import inner_api_only
+from controllers.inner_api.wraps import enterprise_inner_api_only
 from services.account_service import AccountService, TenantService
 
 
@@ -18,7 +18,7 @@ class UpdateUser(Resource):
     email_suffix = os.environ.get("EMAIL_SUFFIX", "EMAIL_SUFFIX")
 
     @setup_required
-    @inner_api_only
+    @enterprise_inner_api_only
     def post(self):
         parser = reqparse.RequestParser()
         parser.add_argument("userInfo", type=dict, required=True, location="json")
@@ -28,8 +28,14 @@ class UpdateUser(Resource):
 
         update_user = args["userInfo"]
         msg_type = args["msgType"]
+        dept_id = str(update_user['deptId'])
+        if dept_id is None or dept_id == "":
+            return {
+                'code': '400',
+                'message': 'dept_id can not be null'
+            }, 400
 
-        tenant = TenantService.get_tenant(str(update_user['deptId']))
+        tenant = TenantService.get_tenant(dept_id)
         if tenant is None:
             logging.error(f"workspace not found with given deptId: {str(update_user['deptId'])}")
 
@@ -65,11 +71,12 @@ class UpdateUser(Resource):
             return {"message": "user created."}
         # 否则什么操作都不做
         return {"message": "user has no change."}
+
 class UpdateDept(Resource):
     admin_username = os.environ.get("ADMIN_USERNAME", "ADMIN_USERNAME")
 
     @setup_required
-    @inner_api_only
+    @enterprise_inner_api_only
     def post(self):
         parser = reqparse.RequestParser()
         parser.add_argument("deptInfo", type=dict, required=True, location="json")
@@ -79,14 +86,21 @@ class UpdateDept(Resource):
 
         update_dept = args["deptInfo"]
         msg_type = args["msgType"]
-
-        tenant = TenantService.get_tenant(str(update_dept['deptId']))
-
+        dept_id = str(update_dept['deptId'])
         new_dept_full_name = update_dept['deptFullName']
+
+        if dept_id is None or dept_id == "" or new_dept_full_name is None or new_dept_full_name == "":
+            return {
+                'code': '400',
+                'message': 'deptId or deptFullName can not be null'
+            }, 400
+
+        tenant = TenantService.get_tenant(dept_id)
+
         # 删除部门，同时删除account_tenant_join
         if msg_type == "DELETE" and tenant is not None:
             TenantService.delete_tenant(tenant)
-        # 否则就是新增部门
+        # 部门为空就是新增部门
         elif msg_type == "CREATE_OR_UPDATE" and tenant is None:
             dept_tenant = TenantService.create_tenant(
                 name=new_dept_full_name,
@@ -113,7 +127,7 @@ class InitPbcData(Resource):
     admin_username = os.environ.get("ADMIN_USERNAME", "ADMIN_USERNAME")
 
     @setup_required
-    @inner_api_only
+    @enterprise_inner_api_only
     def post(self):
         department_resp = self._send_request("GET", self.init_dept_path)
         filtered_dept_data = [dept for dept in department_resp['data'] if dept['deptCode'] == 'A001']
