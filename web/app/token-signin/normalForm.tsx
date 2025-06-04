@@ -4,12 +4,20 @@ import { login } from '@/service/common'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Toast from '@/app/components/base/toast'
 import I18NContext from '@/context/i18n'
-
+function getQueryParam(param: string) {
+  const search = window.location.search.substring(1) // 去掉开头的问号
+  const params = search.split('&')
+  for (let i = 0; i < params.length; i++) {
+    const pair = params[i].split('=')
+    if (decodeURIComponent(pair[0]) === param)
+      return decodeURIComponent(pair[1] || '')
+  }
+  return null
+}
 const NormalForm = () => {
   const { locale } = useContext(I18NContext)
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const code = searchParams.get('code')
+  const code = getQueryParam('code')
 
   useEffect(() => {
     // 不带code就跳转到登录页面
