@@ -120,9 +120,6 @@ class TokenLoginApi(Resource):
             # 这里不需要再次验证账号密码了，直接根据用户名获取用户生成access token和refresh token返回即可
             # account = AccountService.authenticate_name(res["username"], res["password"])
             account = AccountService.get_user_through_name(res["data"]["sysUser"]["username"])
-        except services.errors.account.AccountLoginError:
-            raise AccountBannedError()
-
         except services.errors.account.AccountNotFoundError:
             if FeatureService.get_system_features().is_allow_register:
                 token = AccountService.send_reset_password_email(email=args["email"], language=language)
