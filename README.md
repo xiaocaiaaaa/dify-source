@@ -191,3 +191,15 @@ To protect your privacy, please avoid posting security issues on GitHub. Instead
 
 This repository is available under the [Dify Open Source License](LICENSE), which is essentially Apache 2.0 with a few additional restrictions.
 
+# PBC custom env
+PBC_SERVER_URL=http://10.53.216.24:8081
+DEFAULT_PASSWORD=admindify@2025
+SYS_CODE=123
+SECRET=124
+INNER_API=True
+INNER_API_KEY=QaHbTe77CtuXmsfyhR7+vRjI/+XbV1AaFy691iy+kGDv2Jvy0/eAh8Y1
+INIT_DEPT_PATH=/admin/dept/initAllDept
+INIT_USER_PATH=/admin/user/initAllUser
+PARSE_TOKEN_PATH=/admin/user/infoManager
+EMAIL_SUFFIX=@webank.com
+ADMIN_USERNAME=super_admin
