@@ -17,8 +17,10 @@ function getQueryParam(param: string) {
 const NormalForm = () => {
   const { locale } = useContext(I18NContext)
   const router = useRouter()
-  const code = getQueryParam('code')
-
+  // const code = getQueryParam('code')
+  const searchParams = useSearchParams()
+  const code = searchParams.get('code')
+  console.log('testsch', code)
   useEffect(() => {
     // 不带code就跳转到登录页面
     if (!code || code.trim() === '' || code === 'null' || code === 'undefined') {
