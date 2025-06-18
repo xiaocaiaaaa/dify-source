@@ -32,7 +32,7 @@ const NormalForm = () => {
       if (res.result === 'success') {
         localStorage.setItem('console_token', res.data.access_token)
         localStorage.setItem('refresh_token', res.data.refresh_token)
-        router.replace('/apps')
+        router.replace('/explore/apps')
       }
       else {
         Toast.notify({

@@ -74,6 +74,8 @@ class TenantListApi(Resource):
                 tenant.plan = features.billing.subscription.plan
             else:
                 tenant.plan = "sandbox"
+            # if current_user.current_tenant_id is None and tenant.name == '公共工作空间':
+            #     tenant.current = True
             if tenant.id == current_user.current_tenant_id:
                 tenant.current = True  # Set current=True for current tenant
         return {"workspaces": marshal(tenants, tenants_fields)}, 200

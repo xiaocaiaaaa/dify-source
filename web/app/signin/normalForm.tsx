@@ -36,7 +36,7 @@ const NormalForm = () => {
       if (consoleToken && refreshToken) {
         localStorage.setItem('console_token', consoleToken)
         localStorage.setItem('refresh_token', refreshToken)
-        router.replace('/apps')
+        router.replace('/explore/apps')
         return
       }
 

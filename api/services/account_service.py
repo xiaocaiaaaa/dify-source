@@ -135,8 +135,17 @@ class AccountService:
         if current_tenant:
             account.current_tenant_id = current_tenant.tenant_id
         else:
+            # available_ta = (
+            #     TenantAccountJoin.query.filter_by(account_id=account.id).order_by(TenantAccountJoin.id.asc()).first()
+            # )
             available_ta = (
-                TenantAccountJoin.query.filter_by(account_id=account.id).order_by(TenantAccountJoin.id.asc()).first()
+                # TenantAccountJoin.query.filter_by(account_id=account.id, )
+                db.session.query(TenantAccountJoin)
+                .join(Tenant, Tenant.id == TenantAccountJoin.tenant_id)
+                .filter(
+                    TenantAccountJoin.account_id == account.id,
+                    Tenant.name == "公共工作空间"
+                ).first()
             )
             if not available_ta:
                 return None
