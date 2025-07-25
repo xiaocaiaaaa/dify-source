@@ -137,6 +137,7 @@ def init_app(app: DifyApp):
     from opentelemetry.instrumentation.celery import CeleryInstrumentor
     from opentelemetry.instrumentation.flask import FlaskInstrumentor
     from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+    from opentelemetry.instrumentation.system_metrics import SystemMetricsInstrumentor
     from opentelemetry.metrics import get_meter, get_meter_provider, set_meter_provider
     from opentelemetry.propagate import set_global_textmap
     from opentelemetry.propagators.b3 import B3Format
@@ -151,10 +152,9 @@ def init_app(app: DifyApp):
     )
     from opentelemetry.sdk.trace.sampling import ParentBasedTraceIdRatio
     from opentelemetry.semconv.resource import ResourceAttributes
-    from opentelemetry.trace import Span, get_tracer_provider, set_tracer_provider
+    from opentelemetry.trace import Span, get_tracer_provider
     from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
     from opentelemetry.trace.status import StatusCode
-    from opentelemetry.instrumentation.system_metrics import SystemMetricsInstrumentor
 
     setup_context_propagation()
     # Initialize OpenTelemetry
