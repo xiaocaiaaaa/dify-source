@@ -1,12 +1,19 @@
 import os
 import sys
-
+import logging
 
 def is_db_command():
     if len(sys.argv) > 1 and sys.argv[0].endswith("flask") and sys.argv[1] == "db":
         return True
     return False
 
+class NoHealthCheckFilter(logging.Filter):
+    def filter(self, record):
+        return "/welb_health_check" not in record.getMessage()
+
+# ✅ 配置 werkzeug 日志
+log = logging.getLogger('werkzeug')
+log.addFilter(NoHealthCheckFilter())
 
 # create app
 if is_db_command():

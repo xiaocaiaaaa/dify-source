@@ -57,6 +57,7 @@ dependencies = [
     "opentelemetry-sdk==1.27.0",
     "opentelemetry-semantic-conventions==0.48b0",
     "opentelemetry-util-http==0.48b0",
+    "opentelemetry-instrumentation-system-metrics>=0.48b0",
     "pandas[excel,output-formatting,performance]~=2.2.2",
     "pandoc~=2.4",
     "psycogreen~=1.0.2",

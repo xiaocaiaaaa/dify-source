@@ -154,6 +154,7 @@ def init_app(app: DifyApp):
     from opentelemetry.trace import Span, get_tracer_provider, set_tracer_provider
     from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
     from opentelemetry.trace.status import StatusCode
+    from opentelemetry.instrumentation.system_metrics import SystemMetricsInstrumentor
 
     setup_context_propagation()
     # Initialize OpenTelemetry
@@ -175,7 +176,7 @@ def init_app(app: DifyApp):
     )
     sampler = ParentBasedTraceIdRatio(dify_config.OTEL_SAMPLING_RATE)
     provider = TracerProvider(resource=resource, sampler=sampler)
-    set_tracer_provider(provider)
+    # set_tracer_provider(provider)
     exporter: Union[GRPCSpanExporter, HTTPSpanExporter, ConsoleSpanExporter]
     metric_exporter: Union[GRPCMetricExporter, HTTPMetricExporter, ConsoleMetricExporter]
     protocol = (dify_config.OTEL_EXPORTER_OTLP_PROTOCOL or "").lower()
@@ -223,6 +224,7 @@ def init_app(app: DifyApp):
     if not is_celery_worker():
         init_flask_instrumentor(app)
         CeleryInstrumentor(tracer_provider=get_tracer_provider(), meter_provider=get_meter_provider()).instrument()
+        SystemMetricsInstrumentor().instrument()
     instrument_exception_logging()
     init_sqlalchemy_instrumentor(app)
     atexit.register(shutdown_tracer)
