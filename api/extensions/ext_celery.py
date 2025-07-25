@@ -24,6 +24,10 @@ def init_app(app: DifyApp) -> Celery:
             },
         }
 
+    broker_transport_options.update({
+        "global_keyprefix": "caihu_",
+    })
+
     celery_app = Celery(
         app.name,
         task_cls=FlaskTask,
