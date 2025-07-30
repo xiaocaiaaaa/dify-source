@@ -1,19 +1,17 @@
 # webank_custom_development
 import enum
+import json
+
+from flask_restful import Resource, marshal, reqparse
+from werkzeug.exceptions import Forbidden, NotFound
+
 from controllers.console.wraps import setup_required
 from controllers.inner_api import api
-from controllers.inner_api.wraps import enterprise_inner_api_only
-from events.tenant_event import tenant_was_created
 from fields.dataset_fields import dataset_detail_fields
-from flask_restful import Resource, reqparse, marshal
-from libs.helper import TimestampField
-from models.account import Account
-from services.account_service import AccountService
-from services.account_service import TenantService
+from services.account_service import AccountService, TenantService
 from services.dataset_service import DatasetPermissionService, DatasetService
-from services.errors.dataset import DatasetNameDuplicateError, DatasetNameDuplicateError
+from services.errors.dataset import DatasetNameDuplicateError
 from services.external_knowledge_service import ExternalDatasetService
-from werkzeug.exceptions import Forbidden, NotFound
 
 
 class KBSMsgType(enum.StrEnum):
@@ -58,25 +56,76 @@ class ExternalDatasetApi(Resource):
             external_api_id_req = external_knowledge_api_req.get("id")
             external_dataset_id_req = external_dataset_req.get("id")
 
-            if KBSMsgType.CREATE == args['msgType']:
-                if not external_knowledge_api_req or not external_dataset_req or not permission_req:
-                    raise ValueError("invalid params")
-                ExternalDatasetService.validate_api_list(external_knowledge_api_req["settings"])
+            if args['msgType'] == KBSMsgType.CREATE:
+                external_knowledge_api = None
+                dataset = None
+                external_knowledge_api_id = None
 
-                # 1.创建external_api，获取到external_knowledge_api_id
-                external_knowledge_api = ExternalDatasetService.create_external_knowledge_api(
-                    tenant_id=current_user.current_tenant_id, user_id=current_user.id, args=external_knowledge_api_req)
-                # 2.连接外部知识库，默认only me权限
-                external_dataset_req['external_knowledge_api_id'] = external_knowledge_api.id
-                dataset = ExternalDatasetService.create_external_dataset(
-                    tenant_id=current_user.current_tenant_id,
-                    user_id=current_user.id,
-                    args=external_dataset_req
-                )
-                # 3.设置知识库访问权限，以用户传参为准
-                DatasetService.update_dataset_permission(permission_req, current_user, dataset)
-                return marshal(dataset, dataset_detail_fields), 201
-            elif KBSMsgType.UPDATE == args['msgType']:
+                # 判断是否需要创建 external_knowledge_api，或仅使用已存在的 ID
+                if external_knowledge_api_req:
+                    if "id" in external_knowledge_api_req:
+                        external_knowledge_api_id = external_knowledge_api_req["id"]
+                    elif "settings" in external_knowledge_api_req:
+                        ExternalDatasetService.validate_api_list(external_knowledge_api_req["settings"])
+                        external_knowledge_api = ExternalDatasetService.create_external_knowledge_api(
+                            tenant_id=current_user.current_tenant_id,
+                            user_id=current_user.id,
+                            args=external_knowledge_api_req
+                        )
+                        external_knowledge_api_id = external_knowledge_api.id
+
+                # 创建 external_dataset（如果有）
+                if external_dataset_req:
+                    if not external_knowledge_api_id:
+                        raise ValueError("external_knowledge_api_id is required for dataset creation")
+
+                    # 强制绑定 external_knowledge_api_id
+                    external_dataset_req["external_knowledge_api_id"] = external_knowledge_api_id
+
+                    dataset = ExternalDatasetService.create_external_dataset(
+                        tenant_id=current_user.current_tenant_id,
+                        user_id=current_user.id,
+                        args=external_dataset_req
+                    )
+
+                    # 设置权限（仅当 dataset 创建时才需要）
+                    if permission_req:
+                        DatasetService.update_dataset_permission(permission_req, current_user, dataset)
+
+                if dataset:
+                    # 返回 Dataset 的详细信息
+                    return {
+                        "data": marshal(dataset, dataset_detail_fields),
+                        "message": "success"
+                    }, 200
+                elif external_knowledge_api:
+                    try:
+                        settings = json.loads(external_knowledge_api.settings or '{}')
+                    except Exception:
+                        settings = {}
+
+                    # 构造一个伪 dataset，仅填充 external_knowledge_info 字段
+                    fake_dataset = {
+                        "external_knowledge_info": {
+                            "external_knowledge_id": None,
+                            "external_knowledge_api_id": external_knowledge_api.id,
+                            "external_knowledge_api_name": external_knowledge_api.name,
+                            "external_knowledge_api_endpoint": settings.get("endpoint", "")
+                        }
+                    }
+
+                    return {
+                        "data": marshal(fake_dataset, dataset_detail_fields),
+                        "message": "success"
+                    }, 200
+                else:
+                    # 不应到这里
+                    return {
+                        "data": {},
+                        "message": "no action performed"
+                    }, 400
+
+            elif args['msgType'] == KBSMsgType.UPDATE:
                 if not external_api_id_req or not external_dataset_id_req:
                     raise ValueError("external_knowledge_api.id and external_dataset.id are required")
                 ExternalDatasetService.validate_api_list(external_knowledge_api_req["settings"])
@@ -102,7 +151,7 @@ class ExternalDatasetApi(Resource):
                                                                 permission_req,
                                                                 current_user)
                 return marshal(dataset, dataset_detail_fields), 201
-            elif KBSMsgType.DELETE == args['msgType']:
+            elif args['msgType'] == KBSMsgType.DELETE:
                 if external_api_id_req:
                     ExternalDatasetService.delete_external_knowledge_api(current_user.current_tenant_id,
                                                                          external_api_id_req)
