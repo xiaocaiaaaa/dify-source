@@ -8,3 +8,4 @@ api = ExternalApi(bp)
 from . import mail
 from .plugin import plugin
 from .workspace import workspace
+from .dev import dev_app

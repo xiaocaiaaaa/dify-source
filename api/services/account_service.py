@@ -676,6 +676,13 @@ class TenantService:
         )
 
     @staticmethod
+    def get_tenant_by_workspace_id(id: str):
+
+        ta = db.session.query(Tenant).filter_by(id=id).first()
+        db.session.commit()
+        return ta
+
+    @staticmethod
     def get_current_tenant_by_account(account: Account):
         """Get tenant by account and add the role"""
         tenant = account.current_tenant
