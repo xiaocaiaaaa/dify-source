@@ -1,0 +1,127 @@
+# webank_custom_development
+import enum
+from controllers.console.wraps import setup_required
+from controllers.inner_api import api
+from controllers.inner_api.wraps import enterprise_inner_api_only
+from events.tenant_event import tenant_was_created
+from fields.dataset_fields import dataset_detail_fields
+from flask_restful import Resource, reqparse, marshal
+from libs.helper import TimestampField
+from models.account import Account
+from services.account_service import AccountService
+from services.account_service import TenantService
+from services.dataset_service import DatasetPermissionService, DatasetService
+from services.errors.dataset import DatasetNameDuplicateError, DatasetNameDuplicateError
+from services.external_knowledge_service import ExternalDatasetService
+from werkzeug.exceptions import Forbidden, NotFound
+
+
+class KBSMsgType(enum.StrEnum):
+    CREATE = "create"
+    UPDATE = "update"
+    DELETE = "delete"
+
+
+def _validate_name(name):
+    if not name or len(name) < 1 or len(name) > 100:
+        raise ValueError("Name must be between 1 to 100 characters.")
+    return name
+
+
+# 创建外部知识库
+class ExternalDatasetApi(Resource):
+    @setup_required
+    def post(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument("msgType", type=str, required=True, nullable=False, location="json",
+                            choices=[KBSMsgType.CREATE, KBSMsgType.UPDATE, KBSMsgType.DELETE], help="Invalid Msg type.")
+        parser.add_argument("username", type=str, required=True, nullable=False, location="json")
+        parser.add_argument("workspace_id", type=str, required=True, nullable=False, location="json")
+        parser.add_argument("external_knowledge_api", type=dict, required=False, location="json")
+        parser.add_argument("external_dataset", type=dict, required=False, location="json")
+        parser.add_argument("permission", type=dict, required=False, location="json")
+        args = parser.parse_args()
+
+        current_user = AccountService.get_user_through_name(args["username"])
+        # todo 行内测试的时候这里换成getTenantById
+        tenant = TenantService.get_tenant_by_name(args['workspace_id'])
+        current_user.current_tenant = tenant
+        # The role of the current user in the ta table must be admin, owner, or editor, or dataset_operator
+        if not current_user.is_dataset_editor:
+            raise Forbidden()
+
+        try:
+            external_knowledge_api_req = args.get('external_knowledge_api') or {}
+            external_dataset_req = args.get('external_dataset') or {}
+            permission_req = args.get('permission') or {}
+
+            external_api_id_req = external_knowledge_api_req.get("id")
+            external_dataset_id_req = external_dataset_req.get("id")
+
+            if KBSMsgType.CREATE == args['msgType']:
+                if not external_knowledge_api_req or not external_dataset_req or not permission_req:
+                    raise ValueError("invalid params")
+                ExternalDatasetService.validate_api_list(external_knowledge_api_req["settings"])
+
+                # 1.创建external_api，获取到external_knowledge_api_id
+                external_knowledge_api = ExternalDatasetService.create_external_knowledge_api(
+                    tenant_id=current_user.current_tenant_id, user_id=current_user.id, args=external_knowledge_api_req)
+                # 2.连接外部知识库，默认only me权限
+                external_dataset_req['external_knowledge_api_id'] = external_knowledge_api.id
+                dataset = ExternalDatasetService.create_external_dataset(
+                    tenant_id=current_user.current_tenant_id,
+                    user_id=current_user.id,
+                    args=external_dataset_req
+                )
+                # 3.设置知识库访问权限，以用户传参为准
+                DatasetService.update_dataset_permission(permission_req, current_user, dataset)
+                return marshal(dataset, dataset_detail_fields), 201
+            elif KBSMsgType.UPDATE == args['msgType']:
+                if not external_api_id_req or not external_dataset_id_req:
+                    raise ValueError("external_knowledge_api.id and external_dataset.id are required")
+                ExternalDatasetService.validate_api_list(external_knowledge_api_req["settings"])
+
+                # 1.更新external_knowledge_api
+                external_knowledge_api = ExternalDatasetService.update_external_knowledge_api(
+                    tenant_id=current_user.current_tenant_id,
+                    user_id=current_user.id,
+                    external_knowledge_api_id=external_api_id_req,
+                    args=external_knowledge_api_req,
+                )
+                # 2.更新dataset 和 permission
+                dataset = DatasetService.get_dataset(external_dataset_id_req)
+                if dataset is None:
+                    raise NotFound("Dataset not found.")
+                # The role of the current user in the ta table must be admin, owner, editor, or dataset_operator
+                DatasetPermissionService.check_permission(
+                    current_user, dataset, permission_req.get("mode"), external_dataset_req.get("partial_member_list")
+                )
+                dataset = DatasetService.update_dataset_for_kbs(external_dataset_id_req,
+                                                                external_knowledge_api,
+                                                                external_dataset_req,
+                                                                permission_req,
+                                                                current_user)
+                return marshal(dataset, dataset_detail_fields), 201
+            elif KBSMsgType.DELETE == args['msgType']:
+                if external_api_id_req:
+                    ExternalDatasetService.delete_external_knowledge_api(current_user.current_tenant_id,
+                                                                         external_api_id_req)
+                if external_dataset_id_req:
+                    if DatasetService.delete_dataset(external_dataset_id_req, current_user):
+                        DatasetPermissionService.clear_partial_member_list(external_dataset_id_req)
+                    else:
+                        raise NotFound("Dataset not found.")
+                return {
+                    'retCode': '0',
+                    'retDetail': 'success',
+                }, 204
+        except DatasetNameDuplicateError:
+            raise DatasetNameDuplicateError()
+
+        return {
+            'retCode': '0',
+            'retDetail': 'success',
+        }, 200
+
+
+api.add_resource(ExternalDatasetApi, '/dev/external/datasets')

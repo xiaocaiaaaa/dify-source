@@ -76,6 +76,30 @@ from tasks.sync_website_document_indexing_task import sync_website_document_inde
 
 class DatasetService:
     @staticmethod
+    def update_dataset_permission(permission: dict, current_user, dataset):
+        DatasetPermissionService.check_permission(
+            current_user,
+            dataset,
+            permission.get("mode"),
+            permission.get("partial_member_list")
+        )
+        dataset = DatasetService.get_dataset(dataset.id)
+        if permission:
+            dataset.permission = permission.get("mode")
+        db.session.add(dataset)
+        db.session.commit()
+
+        if permission.get("partial_member_list") and permission.get("mode") == "partial_members":
+            DatasetPermissionService.update_partial_member_list(
+                current_user.current_tenant_id, dataset.id, permission.get("partial_member_list")
+            )
+        elif (
+                permission.get("mode") == DatasetPermissionEnum.ONLY_ME
+                or permission.get("mode") == DatasetPermissionEnum.ALL_TEAM
+        ):
+            DatasetPermissionService.clear_partial_member_list(dataset.id)
+
+    @staticmethod
     def get_datasets(page, per_page, tenant_id=None, user=None, search=None, tag_ids=None, include_all=False):
         query = Dataset.query.filter(Dataset.tenant_id == tenant_id).order_by(Dataset.created_at.desc())
 
@@ -272,6 +296,49 @@ class DatasetService:
             )
         except ProviderTokenNotInitError as ex:
             raise ValueError(ex.description)
+
+    @staticmethod
+    def update_dataset_for_kbs(dataset_id, external_knowledge_api, external_dataset_req, permission_req, user):
+        dataset = DatasetService.get_dataset(dataset_id)
+        if not dataset:
+            raise ValueError("Dataset not found")
+
+        DatasetService.check_dataset_permission(dataset, user)
+        if dataset.provider == "external":
+            external_retrieval_model = external_dataset_req.get("external_retrieval_model", None)
+            if external_retrieval_model:
+                dataset.retrieval_model = external_retrieval_model
+            dataset.name = external_dataset_req.get("name", dataset.name)
+            dataset.description = external_dataset_req.get("description", "")
+            permission = permission_req.get("mode")
+            if permission:
+                dataset.permission = permission
+            external_knowledge_id = external_dataset_req.get("external_knowledge_id", None)
+            db.session.add(dataset)
+            if not external_knowledge_id:
+                raise ValueError("External knowledge id is required.")
+            external_knowledge_api_id = external_knowledge_api.id
+            if not external_knowledge_api_id:
+                raise ValueError("External knowledge api id is required.")
+
+            with Session(db.engine) as session:
+                external_knowledge_binding = (
+                    session.query(ExternalKnowledgeBindings).filter_by(dataset_id=dataset_id).first()
+                )
+
+                if not external_knowledge_binding:
+                    raise ValueError("External knowledge binding not found.")
+
+            if (
+                    external_knowledge_binding.external_knowledge_id != external_knowledge_id
+                    or external_knowledge_binding.external_knowledge_api_id != external_knowledge_api_id
+            ):
+                external_knowledge_binding.external_knowledge_id = external_knowledge_id
+                external_knowledge_binding.external_knowledge_api_id = external_knowledge_api_id
+                db.session.add(external_knowledge_binding)
+            db.session.commit()
+
+        return dataset
 
     @staticmethod
     def update_dataset(dataset_id, data, user):
