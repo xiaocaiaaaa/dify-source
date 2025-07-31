@@ -90,6 +90,17 @@ class ExternalDatasetApi(Resource):
 
                     # 设置权限（仅当 dataset 创建时才需要）
                     if permission_req:
+                        username_list = permission_req.get("partial_member_list")
+                        if username_list:
+                            new_partial_member_list = []
+                            for username in username_list:
+                                user = AccountService.get_user_through_name(username)
+                                if not user:
+                                    raise ValueError(f"User '{username}' not found")
+                                new_partial_member_list.append({"user_id": user.id})
+                            # 替换原来的用户名列表为 user_id 格式列表
+                            permission_req["partial_member_list"] = new_partial_member_list
+
                         DatasetService.update_dataset_permission(permission_req, current_user, dataset)
 
                 if dataset:
