@@ -5,6 +5,7 @@ import yaml
 from flask_login import current_user
 from flask_restful import Resource, inputs, marshal, marshal_with, reqparse, fields
 import services
+import contexts
 from controllers.console.wraps import setup_required
 from controllers.inner_api import api
 from controllers.inner_api.wraps import enterprise_inner_api_only
@@ -164,11 +165,16 @@ class AppExportApi(Resource):
 
     @setup_required
     @enterprise_inner_api_only
-    @get_app_model
-    def get(self, app_model):
+    # @get_app_model
+    def get(self, app_id):
         """Export app"""
-        contexts.tenant_id.set(app_model.tenant_id)
+        # contexts.tenant_id.set(app_model.tenant_id)
         # Add include_secret params
+        app_model = (
+            db.session.query(App)
+            .filter(App.id == app_id, App.status == "normal")
+            .first()
+        )
         parser = reqparse.RequestParser()
         parser.add_argument('include_secret', type=inputs.boolean, default=False, location='args')
         args = parser.parse_args()

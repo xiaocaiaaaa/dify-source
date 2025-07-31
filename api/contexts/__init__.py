@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from core.tools.plugin_tool.provider import PluginToolProviderController
     from core.workflow.entities.variable_pool import VariablePool
 
-
+tenant_id: ContextVar[str] = ContextVar("tenant_id")
 """
 To avoid race-conditions caused by gunicorn thread recycling, using RecyclableContextVar to replace with
 """
