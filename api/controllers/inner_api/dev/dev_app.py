@@ -165,16 +165,9 @@ class AppExportApi(Resource):
 
     @setup_required
     @enterprise_inner_api_only
-    # @get_app_model
-    def get(self, app_id):
+    @get_app_model
+    def get(self, app_model):
         """Export app"""
-        # contexts.tenant_id.set(app_model.tenant_id)
-        # Add include_secret params
-        app_model = (
-            db.session.query(App)
-            .filter(App.id == app_id, App.status == "normal")
-            .first()
-        )
         parser = reqparse.RequestParser()
         parser.add_argument('include_secret', type=inputs.boolean, default=False, location='args')
         args = parser.parse_args()

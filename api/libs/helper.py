@@ -43,6 +43,8 @@ def extract_tenant_id(user: Union["Account", "EndUser"]) -> str | None:
     """
     from models.account import Account
     from models.model import EndUser
+    if user.is_anonymous:
+        return None
 
     if isinstance(user, Account):
         return user.current_tenant_id
