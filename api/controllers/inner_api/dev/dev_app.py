@@ -150,6 +150,8 @@ class AppImportApi(Resource):
             return result.model_dump(mode="json"), 400
         elif status == ImportStatus.PENDING.value:
             return result.model_dump(mode="json"), 202
+
+        app = db.session.query(App).filter_by(id=result.app_id).first()
         return result.model_dump(mode="json"), 200
 
         # return {
