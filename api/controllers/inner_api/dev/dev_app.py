@@ -103,6 +103,8 @@ class AppImportApi(Resource):
         account = AccountService.get_user_through_email(args['user_id'])
         tenant = TenantService.get_tenant_by_workspace_id(args['workspace_id'])
         account.current_tenant = tenant
+
+        contexts.tenant_id.set(account.current_tenant_id)
         if account is None:
             return {
                 'code': '404',
@@ -126,6 +128,7 @@ class AppImportApi(Resource):
         # Create service with session
         with Session(db.engine) as session:
             import_service = AppDslService(session)
+
 
             # Import app
             result = import_service.import_app(
