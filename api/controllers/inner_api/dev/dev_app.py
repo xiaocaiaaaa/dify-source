@@ -1,4 +1,6 @@
 #webank_custom_development
+import json
+import logging
 from ctypes import cast
 
 import yaml
@@ -114,10 +116,10 @@ class AppImportApi(Resource):
         data_str = args["data"]
         # 去除首尾多余的引号（如果需要）
         data_str = data_str.strip('"')
-        # 将转义的双引号还原
-        data_str = data_str.replace('\\"', '"')
-        # 将转义的反斜杠还原
-        data_str = data_str.replace('\\\\', '\\')
+        # # 将转义的双引号还原
+        # data_str = data_str.replace('\\"', '"')
+        # # 将转义的反斜杠还原
+        # data_str = data_str.replace('\\\\', '\\')
 
         try:
             import_data = yaml.safe_load(data_str)
@@ -143,7 +145,21 @@ class AppImportApi(Resource):
                 icon_background=args.get("icon_background"),
                 app_id=args.get("app_id"),
             )
+            status = result.status
+
+            # 如果dsl版本不兼容，强制导入
+            if status == ImportStatus.PENDING.value:
+                config_import_result = import_service.confirm_import(import_id=result.id, account=account)
+                session.commit()
+                if config_import_result.status == ImportStatus.FAILED.value:
+                    return {
+                                'code': '-1',
+                                'message': 'fail',
+                                'data': config_import_result.model_dump(mode="json")
+                            }, 400
             session.commit()
+            logging.info(f"import result: {result.model_dump()}")
+
         if result.app_id and FeatureService.get_system_features().webapp_auth.enabled:
             # update web app setting as private
             EnterpriseService.WebAppAuth.update_app_access_mode(result.app_id, "private")

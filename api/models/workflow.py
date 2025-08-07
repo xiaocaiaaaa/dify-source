@@ -352,6 +352,9 @@ class Workflow(Base):
         if self._environment_variables is None:
             self._environment_variables = "{}"
 
+        # inner api调用没有鉴权用户
+        if current_user is None or current_user.is_anonymous or not current_user.is_authenticated:
+            return []
         # Get tenant_id from current_user (Account or EndUser)
         tenant_id = extract_tenant_id(current_user)
 
