@@ -566,6 +566,7 @@ def upgrade():
     op.create_table('tenants',
     sa.Column('id', postgresql.UUID(), server_default=sa.text('uuid_generate_v4()'), nullable=False),
     sa.Column('name', sa.String(length=255), nullable=False),
+    sa.Column('dept_id', sa.String(length=255), nullable=True),
     sa.Column('encrypt_public_key', sa.Text(), nullable=True),
     sa.Column('plan', sa.String(length=255), server_default=sa.text("'basic'::character varying"), nullable=False),
     sa.Column('status', sa.String(length=255), server_default=sa.text("'normal'::character varying"), nullable=False),

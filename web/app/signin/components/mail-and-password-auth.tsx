@@ -74,7 +74,7 @@ export default function MailAndPasswordAuth({ isInvite, isEmailSetup, allowRegis
         else {
           localStorage.setItem('console_token', res.data.access_token)
           localStorage.setItem('refresh_token', res.data.refresh_token)
-          router.replace('/apps')
+          router.replace('/explore/apps')
         }
       }
       else if (res.code === 'account_not_found') {

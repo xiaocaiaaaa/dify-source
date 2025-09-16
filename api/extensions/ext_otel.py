@@ -35,6 +35,15 @@ def on_user_loaded(_sender, user: Union["Account", "EndUser"]):
                 logging.exception("Error setting tenant and user attributes")
                 pass
 
+def get_local_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # 不需要真的连上，只是触发系统选择一个可用的出口 IP
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+    finally:
+        s.close()
+    return ip
 
 def init_app(app: DifyApp):
     from opentelemetry.semconv.trace import SpanAttributes
@@ -152,7 +161,7 @@ def init_app(app: DifyApp):
     )
     from opentelemetry.sdk.trace.sampling import ParentBasedTraceIdRatio
     from opentelemetry.semconv.resource import ResourceAttributes
-    from opentelemetry.trace import Span, get_tracer_provider
+    from opentelemetry.trace import Span, get_tracer_provider, set_tracer_provider
     from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
     from opentelemetry.trace.status import StatusCode
 
@@ -167,6 +176,7 @@ def init_app(app: DifyApp):
             ResourceAttributes.DEPLOYMENT_ENVIRONMENT: f"{dify_config.DEPLOY_ENV}-{dify_config.EDITION}",
             ResourceAttributes.HOST_NAME: socket.gethostname(),
             ResourceAttributes.HOST_ARCH: platform.machine(),
+            "ip_address": str(get_local_ip()),
             "custom.deployment.git_commit": dify_config.COMMIT_SHA,
             ResourceAttributes.HOST_ID: platform.node(),
             ResourceAttributes.OS_TYPE: platform.system().lower(),
@@ -176,7 +186,7 @@ def init_app(app: DifyApp):
     )
     sampler = ParentBasedTraceIdRatio(dify_config.OTEL_SAMPLING_RATE)
     provider = TracerProvider(resource=resource, sampler=sampler)
-    # set_tracer_provider(provider)
+    set_tracer_provider(provider)
     exporter: Union[GRPCSpanExporter, HTTPSpanExporter, ConsoleSpanExporter]
     metric_exporter: Union[GRPCMetricExporter, HTTPMetricExporter, ConsoleMetricExporter]
     protocol = (dify_config.OTEL_EXPORTER_OTLP_PROTOCOL or "").lower()

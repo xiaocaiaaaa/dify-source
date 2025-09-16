@@ -79,6 +79,29 @@ class AccountService:
     FORGOT_PASSWORD_MAX_ERROR_LIMITS = 5
 
     @staticmethod
+    def get_all_accounts() -> list[Tenant]:
+        """Get all tenants"""
+        return db.session.query(Account).filter(Account.status == AccountStatus.ACTIVE).all()
+
+    @staticmethod
+    def pbc_delete_account(account: Account) -> None:
+        db.session.query(TenantAccountJoin).filter_by(account_id=account.id).delete()
+        db.session.query(Account).filter_by(id=account.id).delete()
+        db.session.commit()
+
+    @staticmethod
+    def update_account(account, **kwargs):
+        """Update account fields"""
+        for field, value in kwargs.items():
+            if hasattr(account, field):
+                setattr(account, field, value)
+            else:
+                raise AttributeError(f"Invalid field: {field}")
+
+        db.session.commit()
+        return account
+
+    @staticmethod
     def _get_refresh_token_key(refresh_token: str) -> str:
         return f"{REFRESH_TOKEN_PREFIX}{refresh_token}"
 
@@ -111,12 +134,20 @@ class AccountService:
         if current_tenant:
             account.set_tenant_id(current_tenant.tenant_id)
         else:
+
             available_ta = (
+                # TenantAccountJoin.query.filter_by(account_id=account.id, )
                 db.session.query(TenantAccountJoin)
-                .filter_by(account_id=account.id)
-                .order_by(TenantAccountJoin.id.asc())
-                .first()
+                .join(Tenant, Tenant.id == TenantAccountJoin.tenant_id)
+                .filter(
+                    TenantAccountJoin.account_id == account.id,
+                    Tenant.name == "公共工作空间"
+                ).first()
             )
+            if available_ta is None:
+                available_ta = (
+                    TenantAccountJoin.query.filter_by(account_id=account.id).order_by(TenantAccountJoin.id.asc()).first()
+                )
             if not available_ta:
                 return None
 
@@ -149,6 +180,37 @@ class AccountService:
         """authenticate account with email and password"""
 
         account = db.session.query(Account).filter_by(email=email).first()
+        if not account:
+            raise AccountNotFoundError()
+
+        if account.status == AccountStatus.BANNED.value:
+            raise AccountLoginError("Account is banned.")
+
+        if password and invite_token and account.password is None:
+            # if invite_token is valid, set password and password_salt
+            salt = secrets.token_bytes(16)
+            base64_salt = base64.b64encode(salt).decode()
+            password_hashed = hash_password(password, salt)
+            base64_password_hashed = base64.b64encode(password_hashed).decode()
+            account.password = base64_password_hashed
+            account.password_salt = base64_salt
+
+        if account.password is None or not compare_password(password, account.password, account.password_salt):
+            raise AccountPasswordError("Invalid email or password.")
+
+        if account.status == AccountStatus.PENDING.value:
+            account.status = AccountStatus.ACTIVE.value
+            account.initialized_at = datetime.now(UTC).replace(tzinfo=None)
+
+        db.session.commit()
+
+        return cast(Account, account)
+
+    @staticmethod
+    def authenticate_name(name: str, password: str, invite_token: Optional[str] = None) -> Account:
+        """authenticate account with email and password"""
+
+        account = db.session.query(Account).filter_by(name=name).first()
         if not account:
             raise AccountNotFoundError()
 
@@ -246,6 +308,41 @@ class AccountService:
         return account
 
     @staticmethod
+    def create_pbc_account(
+            email: str,
+            name: str,
+            interface_language: str,
+            password: Optional[str] = None,
+            interface_theme: str = "light"
+    ) -> Account:
+        """create account"""
+        account = Account()
+        account.email = email
+        account.name = name
+
+        if password:
+            # generate password salt
+            salt = secrets.token_bytes(16)
+            base64_salt = base64.b64encode(salt).decode()
+
+            # encrypt password with salt
+            password_hashed = hash_password(password, salt)
+            base64_password_hashed = base64.b64encode(password_hashed).decode()
+
+            account.password = base64_password_hashed
+            account.password_salt = base64_salt
+
+        account.interface_language = interface_language
+        account.interface_theme = interface_theme
+
+        # Set timezone based on language
+        account.timezone = language_timezone_mapping.get(interface_language, "UTC")
+
+        db.session.add(account)
+        db.session.commit()
+        return account
+
+    @staticmethod
     def create_account_and_tenant(
         email: str, name: str, interface_language: str, password: Optional[str] = None
     ) -> Account:
@@ -306,7 +403,7 @@ class AccountService:
             if account_integrate:
                 # If it exists, update the record
                 account_integrate.open_id = open_id
-                account_integrate.encrypted_token = ""  # todo
+                account_integrate.encrypted_token = ""
                 account_integrate.updated_at = datetime.now(UTC).replace(tzinfo=None)
             else:
                 # If it does not exist, create a new record
@@ -476,6 +573,17 @@ class AccountService:
         TokenManager.revoke_token(token, "email_code_login")
 
     @classmethod
+    def get_user_through_name(cls, name: str):
+        account = db.session.query(Account).filter(Account.name == name).first()
+        # if not account:
+        #     raise AccountNotFoundError("Account not found.")
+        #
+        # if account.status == AccountStatus.BANNED.value:
+        #     raise Unauthorized("Account is banned.")
+        db.session.commit()
+        return account
+
+    @classmethod
     def get_user_through_email(cls, email: str):
         if dify_config.BILLING_ENABLED and BillingService.is_email_in_freeze(email):
             raise AccountRegisterError(
@@ -596,7 +704,42 @@ class AccountService:
 
 class TenantService:
     @staticmethod
-    def create_tenant(name: str, is_setup: Optional[bool] = False, is_from_dashboard: Optional[bool] = False) -> Tenant:
+    def delete_tenant(tenant: Tenant) -> None:
+        db.session.query(TenantAccountJoin).filter_by(tenant_id=tenant.id).delete()
+        db.session.delete(tenant)
+        db.session.commit()
+
+    @staticmethod
+    def get_all_tenants() -> list[Tenant]:
+        """Get all tenants"""
+        return db.session.query(Tenant).filter(Tenant.status == TenantStatus.NORMAL).all()
+
+    @staticmethod
+    def update_tenant(tenant, **kwargs):
+        """Update account fields"""
+        for field, value in kwargs.items():
+            if hasattr(tenant, field):
+                setattr(tenant, field, value)
+            else:
+                raise AttributeError(f"Invalid field: {field}")
+
+        db.session.commit()
+        return tenant
+
+    @staticmethod
+    def get_tenant(dept_id: str) -> Tenant:
+        tenant = Tenant.query.filter_by(dept_id=dept_id).first()
+        db.session.commit()
+        return tenant
+
+    @staticmethod
+    def get_tenant_by_name(name: str) -> Tenant:
+        tenant = db.session.query(Tenant).filter(Tenant.name == name).first()
+        db.session.commit()
+        return tenant
+
+    @staticmethod
+    def create_tenant(name: str, dept_id: Optional[str] = "",is_setup: Optional[bool] = False, is_from_dashboard: Optional[bool] = False) -> Tenant:
         """Create tenant"""
         if (
             not FeatureService.get_system_features().is_allow_create_workspace
@@ -606,7 +749,7 @@ class TenantService:
             from controllers.console.error import NotAllowedCreateWorkspace
 
             raise NotAllowedCreateWorkspace()
-        tenant = Tenant(name=name)
+        tenant = Tenant(name=name, dept_id=dept_id)
 
         db.session.add(tenant)
         db.session.commit()
@@ -824,6 +967,16 @@ class TenantService:
         TenantService.check_member_permission(tenant, operator, account, "remove")
 
         ta = db.session.query(TenantAccountJoin).filter_by(tenant_id=tenant.id, account_id=account.id).first()
+        if not ta:
+            raise MemberNotInTenantError("Member not in tenant.")
+
+        db.session.delete(ta)
+        db.session.commit()
+
+    @staticmethod
+    def pbc_remove_member_from_tenant(tenant: Tenant, account: Account) -> None:
+        """Remove member from tenant"""
+        ta = TenantAccountJoin.query.filter_by(tenant_id=tenant.id, account_id=account.id).first()
         if not ta:
             raise MemberNotInTenantError("Member not in tenant.")
 

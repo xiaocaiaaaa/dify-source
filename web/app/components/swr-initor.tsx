@@ -24,7 +24,7 @@ const SwrInitor = ({
   const refreshTokenFromLocalStorage = localStorage?.getItem('refresh_token')
   const pathname = usePathname()
   const [init, setInit] = useState(false)
-
+  const code = searchParams.get('code')
   const isSetupFinished = useCallback(async () => {
     try {
       if (localStorage.getItem('setup_status') === 'finished')
@@ -57,7 +57,7 @@ const SwrInitor = ({
           return
         }
         if (!((consoleToken && refreshToken) || (consoleTokenFromLocalStorage && refreshTokenFromLocalStorage))) {
-          router.replace('/signin')
+          router.replace(`/token-signin?code=${code}`)
           return
         }
         if (searchParams.has('access_token') || searchParams.has('refresh_token')) {

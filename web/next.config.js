@@ -58,7 +58,7 @@ const nextConfig = {
     return [
       {
         source: '/',
-        destination: '/apps',
+        destination: '/explore/apps',
         permanent: false,
       },
     ]

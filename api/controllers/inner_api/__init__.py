@@ -6,6 +6,6 @@ bp = Blueprint("inner_api", __name__, url_prefix="/inner/api")
 api = ExternalApi(bp)
 
 from . import mail
+from .dev import dev_account, dev_app, dev_init_update, dev_plugins, dev_workspace
 from .plugin import plugin
 from .workspace import workspace
-from .dev import dev_app
