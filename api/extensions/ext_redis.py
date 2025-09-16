@@ -15,6 +15,8 @@ from dify_app import DifyApp
 
 logger = logging.getLogger(__name__)
 
+from configs.middleware.cache.redis_with_prefix import RedisWithPrefix
+
 
 class RedisClientWrapper:
     """
@@ -120,6 +122,8 @@ def init_app(app: DifyApp):
         pool = redis.ConnectionPool(**redis_params)
         redis_client.initialize(redis.Redis(connection_pool=pool))
 
+    prefixed_client = RedisWithPrefix(redis_client._client)
+    redis_client._client = prefixed_client
     app.extensions["redis"] = redis_client
 
 

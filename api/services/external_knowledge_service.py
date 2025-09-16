@@ -1,4 +1,5 @@
 import json
+import logging
 from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any, Optional, Union, cast
@@ -306,6 +307,10 @@ class ExternalDatasetService:
             ),
             None,
         )
+        logging.info(f"External retrieval request body: {request_params}, settings header: {headers}")
+        logging.info(f"External retrieval response: {response.content.decode("utf-8")}")
+        logging.info(f"External retrieval response text: {response.text}")
+
         if response.status_code == 200:
             return cast(list[Any], response.json().get("records", []))
         return []

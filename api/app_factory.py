@@ -1,6 +1,8 @@
 import logging
 import time
 
+from flask import request
+
 from configs import dify_config
 from contexts.wrapper import RecyclableContextVar
 from dify_app import DifyApp
@@ -20,10 +22,29 @@ def create_flask_app_with_configs() -> DifyApp:
     # add before request hook
     @dify_app.before_request
     def before_request():
-        # add an unique identifier to each request
         RecyclableContextVar.increment_thread_recycles()
+        # 放掉预检请求
+        if request.method == 'OPTIONS':
+            return '', 200
+        # 用于请求追踪
+        # request._request_id = str(uuid.uuid4())[:8]  # 也可以全长 uuid
+        # logging.info(
+        #     f"[{request._request_id}] Incoming {request.method} {request.path} "
+        # )
+        # print("current_user:", current_user.id, current_user.name)
+        #
+        # raw_body = request.get_data(as_text=True)
+        # print("Raw body:", raw_body)
 
+    @dify_app.after_request
+    def after_request(response):
+        # request_id = getattr(request, "_request_id", "-")
+        # logging.info(
+        #     f"[{request_id}] Response status: {response.status_code} | {request.method} {request.path}"
+        # )
+        return response
     return dify_app
+
 
 
 def create_app() -> DifyApp:
