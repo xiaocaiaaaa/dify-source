@@ -77,12 +77,12 @@ services:
       - ./middleware.env
     environment:
       # Use the shared environment variables.
-      DB_HOST: ${DB_HOST:-db}
+      DB_HOST: host.docker.internal
       DB_PORT: ${DB_PORT:-5432}
       DB_USERNAME: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-difyai123456}
       DB_DATABASE: ${DB_PLUGIN_DATABASE:-dify_plugin}
-      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_HOST: host.docker.internal
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-difyai123456}
       SERVER_PORT: ${PLUGIN_DAEMON_PORT:-5002}

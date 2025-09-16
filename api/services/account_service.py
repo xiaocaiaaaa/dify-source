@@ -169,7 +169,7 @@ class AccountService:
             )
             if available_ta is None:
                 available_ta = (
-                    TenantAccountJoin.query.filter_by(account_id=account.id).order_by(TenantAccountJoin.id.asc()).first()
+                    db.session.query(TenantAccountJoin).filter_by(account_id=account.id).order_by(TenantAccountJoin.id.asc()).first()
                 )
             if not available_ta:
                 return None

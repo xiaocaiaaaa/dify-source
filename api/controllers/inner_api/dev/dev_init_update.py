@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+from typing import Literal
 
 import httpx
 from flask_restful import Resource, reqparse  # type: ignore
@@ -14,7 +15,7 @@ from models.account import Account, TenantAccountJoin, TenantAccountRole
 
 from controllers.console.wraps import setup_required
 from controllers.inner_api import api
-from controllers.inner_api.wraps import inner_api_only
+from controllers.inner_api.wraps import enterprise_inner_api_only
 from events.tenant_event import tenant_was_created
 from models.account import Account
 from services.account_service import TenantService
@@ -30,7 +31,7 @@ class UpdateUser(Resource):
     email_suffix = os.environ.get("EMAIL_SUFFIX", "EMAIL_SUFFIX")
 
     @setup_required
-    @inner_api_only
+    @enterprise_inner_api_only
     def post(self):
         parser = reqparse.RequestParser()
         parser.add_argument("userInfo", type=dict, required=True, location="json")
@@ -88,7 +89,7 @@ class UpdateDept(Resource):
     admin_username = os.environ.get("ADMIN_USERNAME", "ADMIN_USERNAME")
 
     @setup_required
-    @inner_api_only
+    @enterprise_inner_api_only
     def post(self):
         parser = reqparse.RequestParser()
         parser.add_argument("deptInfo", type=dict, required=True, location="json")
@@ -141,7 +142,7 @@ class InitPbcData(Resource):
     admin_username = os.environ.get("ADMIN_USERNAME", "ADMIN_USERNAME")
 
     @setup_required
-    @inner_api_only
+    @enterprise_inner_api_only
     def post(self):
         department_resp = self._send_request("GET", self.init_dept_path)
         filtered_dept_data = [dept for dept in department_resp['data'] if dept['deptCode'] == 'A001']
