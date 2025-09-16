@@ -24,8 +24,7 @@ npm run dev
 ```shell
 cd api
 pyenv global 3.12
-poetry env use 3.12
-poetry install
+uv sync
 ```
 + 可以直接命令行启动：
   + uv run flask db upgrade
