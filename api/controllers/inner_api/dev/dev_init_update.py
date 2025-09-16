@@ -1,24 +1,36 @@
-import logging
+import json
 import os
-from typing import Literal
+import logging
 
 import httpx
 from flask_restful import Resource, reqparse  # type: ignore
 from tenacity import retry, retry_if_exception_type, stop_before_delay, wait_fixed
 
 from constants.languages import languages
+
+from extensions.ext_database import db
+from libs.helper import RateLimiter
+from models.account import Account, TenantAccountJoin, TenantAccountRole
+
 from controllers.console.wraps import setup_required
 from controllers.inner_api import api
-from controllers.inner_api.wraps import enterprise_inner_api_only
-from services.account_service import AccountService, TenantService
+from controllers.inner_api.wraps import inner_api_only
+from events.tenant_event import tenant_was_created
+from models.account import Account
+from services.account_service import TenantService
+from services.account_service import AccountService
+from configs import dify_config
 
+from services.account_service import RegisterService
+
+from models import AccountStatus
 
 class UpdateUser(Resource):
     default_password = os.environ.get("DEFAULT_PASSWORD", "DEFAULT_PASSWORD")
     email_suffix = os.environ.get("EMAIL_SUFFIX", "EMAIL_SUFFIX")
 
     @setup_required
-    @enterprise_inner_api_only
+    @inner_api_only
     def post(self):
         parser = reqparse.RequestParser()
         parser.add_argument("userInfo", type=dict, required=True, location="json")
@@ -35,7 +47,7 @@ class UpdateUser(Resource):
                 'message': 'dept_id can not be null'
             }, 400
 
-        tenant = TenantService.get_tenant(dept_id)
+        tenant = TenantService.get_tenant(str(update_user['deptId']))
         if tenant is None:
             logging.error(f"workspace not found with given deptId: {str(update_user['deptId'])}")
 
@@ -46,10 +58,10 @@ class UpdateUser(Resource):
 
         account = AccountService.get_user_through_name(update_user['username'])
 
-        if msg_type == "DELETE" and account is not None:
+        if "DELETE" == msg_type and account is not None:
             AccountService.pbc_delete_account(account)
             return {"message": "user deleted."}
-        elif msg_type == "CREATE_OR_UPDATE" and account is not None:
+        elif "CREATE_OR_UPDATE" == msg_type and account is not None:
             tenant_list = TenantService.get_join_tenants(account)
             ori_tenant = next((t for t in tenant_list if t.name != "公共工作空间"), None)
             # 除了公共工作空间没有其他的工作空间，直接加入到新的工作空间
@@ -61,7 +73,7 @@ class UpdateUser(Resource):
                 TenantService.pbc_remove_member_from_tenant(ori_tenant, account)
                 TenantService.create_tenant_member(tenant, account, role="normal")
                 return {"message": "user updated."}
-        elif msg_type == "CREATE_OR_UPDATE" and account is None:
+        elif "CREATE_OR_UPDATE" == msg_type and account is None:
             new_account = AccountService.create_pbc_account(update_user['username'] + self.email_suffix, update_user['username'],
                                               languages[0], self.default_password)
             # 新增用户需要添加到公共工作空间，normal权限
@@ -76,7 +88,7 @@ class UpdateDept(Resource):
     admin_username = os.environ.get("ADMIN_USERNAME", "ADMIN_USERNAME")
 
     @setup_required
-    @enterprise_inner_api_only
+    @inner_api_only
     def post(self):
         parser = reqparse.RequestParser()
         parser.add_argument("deptInfo", type=dict, required=True, location="json")
@@ -86,7 +98,9 @@ class UpdateDept(Resource):
 
         update_dept = args["deptInfo"]
         msg_type = args["msgType"]
-        dept_id = str(update_dept['deptId'])
+
+        tenant = TenantService.get_tenant(str(update_dept['deptId']))
+
         new_dept_full_name = update_dept['deptFullName']
 
         if dept_id is None or dept_id == "" or new_dept_full_name is None or new_dept_full_name == "":
@@ -98,10 +112,10 @@ class UpdateDept(Resource):
         tenant = TenantService.get_tenant(dept_id)
 
         # 删除部门，同时删除account_tenant_join
-        if msg_type == "DELETE" and tenant is not None:
+        if "DELETE" == msg_type and tenant is not None:
             TenantService.delete_tenant(tenant)
-        # 部门为空就是新增部门
-        elif msg_type == "CREATE_OR_UPDATE" and tenant is None:
+        # 否则就是新增部门
+        elif "CREATE_OR_UPDATE" == msg_type and tenant is None:
             dept_tenant = TenantService.create_tenant(
                 name=new_dept_full_name,
                 dept_id=update_dept['deptId'],
@@ -111,7 +125,7 @@ class UpdateDept(Resource):
             admin_account = AccountService.get_user_through_name(self.admin_username)
             TenantService.create_tenant_member(dept_tenant, admin_account, role="owner")
         # 否则就是部门改名
-        elif msg_type == "CREATE_OR_UPDATE" and tenant is not None:
+        elif "CREATE_OR_UPDATE" == msg_type and tenant is not None:
             tenant.name = new_dept_full_name
             TenantService.update_tenant(tenant)
         return {"message": "workspace updated success."}
@@ -127,7 +141,7 @@ class InitPbcData(Resource):
     admin_username = os.environ.get("ADMIN_USERNAME", "ADMIN_USERNAME")
 
     @setup_required
-    @enterprise_inner_api_only
+    @inner_api_only
     def post(self):
         department_resp = self._send_request("GET", self.init_dept_path)
         filtered_dept_data = [dept for dept in department_resp['data'] if dept['deptCode'] == 'A001']

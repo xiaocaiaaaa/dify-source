@@ -9,3 +9,4 @@ from . import mail
 from .dev import dev_account, dev_app, dev_init_update, dev_kbs, dev_plugins, dev_workspace
 from .plugin import plugin
 from .workspace import workspace
+from .dev import dev_workspace, dev_account, dev_init_update

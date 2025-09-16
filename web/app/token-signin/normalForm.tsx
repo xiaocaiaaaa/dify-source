@@ -8,6 +8,7 @@ import I18NContext from '@/context/i18n'
 const NormalForm = () => {
   const { locale } = useContext(I18NContext)
   const router = useRouter()
+  // const code = getQueryParam('code')
   const searchParams = useSearchParams()
   const code = searchParams.get('code')
 

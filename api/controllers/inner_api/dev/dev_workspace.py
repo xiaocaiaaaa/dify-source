@@ -5,15 +5,16 @@ import logging
 import os
 from datetime import datetime
 
-from flask_restful import Resource, fields, marshal, reqparse
+from flask_restful import Resource, reqparse, fields, marshal, reqparse
 
 from controllers.console.wraps import setup_required
 from controllers.inner_api import api
-from controllers.inner_api.wraps import enterprise_inner_api_only
+from controllers.inner_api.wraps import inner_api_only
 from events.tenant_event import tenant_was_created
+from services.account_service import TenantService, AccountService
 from libs.helper import TimestampField
-from models.account import Account
-from services.account_service import TenantService
+from configs import dify_config
+from models.account import Account, TenantAccountJoin, TenantAccountRole
 
 workspace_fields = {
     'id': fields.String,
@@ -118,7 +119,7 @@ class CreateWorkspaceApi(Resource):
     admin_username = os.environ.get("ADMIN_USERNAME", "ADMIN_USERNAME")
 
     @setup_required
-    @enterprise_inner_api_only
+    @inner_api_only
     def post(self):
         # 创建工作空间，使用admin账户作为owner
         parser = reqparse.RequestParser()
@@ -154,7 +155,7 @@ class CreateWorkspaceApi(Resource):
 
 class UpdateWorkspaceApi(Resource):
     @setup_required
-    @enterprise_inner_api_only
+    @inner_api_only
     def put(self):
         parser = reqparse.RequestParser()
         parser.add_argument('dept_id', type=str, required=True, location='json')
@@ -179,7 +180,7 @@ class UpdateWorkspaceApi(Resource):
 
 class WorkspaceApi(Resource):
     @setup_required
-    @enterprise_inner_api_only
+    @inner_api_only
     def get(self, dept_id):
         tenant = TenantService.get_tenant(dept_id)
         if tenant is None:
@@ -196,7 +197,7 @@ class WorkspaceApi(Resource):
         }, 200
 
     @setup_required
-    @enterprise_inner_api_only
+    @inner_api_only
     def delete(self, dept_id):
         tenant = TenantService.get_tenant(dept_id)
         if tenant is None:
@@ -210,8 +211,20 @@ class WorkspaceApi(Resource):
             'message': 'workspace delete success'
         }, 200
 
-class ItsmWorkspaceApi(Resource):
+class QueryWorkspaceListApi(Resource):
     @setup_required
+    @inner_api_only
+    def get(self):
+        tenants = TenantService.get_all_tenants()
+        return {
+            'code': '0',
+            'message': 'success',
+            'data': {
+                'workspaceList': marshal(tenants, workspace_fields)}
+        }, 200
+
+
+class ItsmWorkspaceApi(Resource):
     def post(self):
         parser = reqparse.RequestParser()
         parser.add_argument('data', type=str, required=False, location='json')
@@ -244,14 +257,11 @@ class ItsmWorkspaceApi(Resource):
             except Exception as e:
                 logging.exception(f"Error processing item {item}: {str(e)}")
                 continue  # 跳过当前项，继续处理下一个
-
         return {
             'retCode': '0',
             'retDetail': 'success',
-            'data': {
                 'workspace_id': 'tenant.id'
-            }
-        }, 200
+            }, 200
 
 api.add_resource(ItsmWorkspaceApi, '/dev/itsm/workspace')
 api.add_resource(CreateWorkspaceApi, '/dev/create/workspace')

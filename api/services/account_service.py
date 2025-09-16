@@ -102,6 +102,29 @@ class AccountService:
         return account
 
     @staticmethod
+    def get_all_accounts() -> list[Tenant]:
+        """Get all tenants"""
+        return db.session.query(Account).filter(Account.status == AccountStatus.ACTIVE).all()
+
+    @staticmethod
+    def pbc_delete_account(account: Account) -> None:
+        db.session.query(TenantAccountJoin).filter_by(account_id=account.id).delete()
+        db.session.query(Account).filter_by(id=account.id).delete()
+        db.session.commit()
+
+    @staticmethod
+    def update_account(account, **kwargs):
+        """Update account fields"""
+        for field, value in kwargs.items():
+            if hasattr(account, field):
+                setattr(account, field, value)
+            else:
+                raise AttributeError(f"Invalid field: {field}")
+
+        db.session.commit()
+        return account
+
+    @staticmethod
     def _get_refresh_token_key(refresh_token: str) -> str:
         return f"{REFRESH_TOKEN_PREFIX}{refresh_token}"
 
@@ -180,6 +203,37 @@ class AccountService:
         """authenticate account with email and password"""
 
         account = db.session.query(Account).filter_by(email=email).first()
+        if not account:
+            raise AccountNotFoundError()
+
+        if account.status == AccountStatus.BANNED.value:
+            raise AccountLoginError("Account is banned.")
+
+        if password and invite_token and account.password is None:
+            # if invite_token is valid, set password and password_salt
+            salt = secrets.token_bytes(16)
+            base64_salt = base64.b64encode(salt).decode()
+            password_hashed = hash_password(password, salt)
+            base64_password_hashed = base64.b64encode(password_hashed).decode()
+            account.password = base64_password_hashed
+            account.password_salt = base64_salt
+
+        if account.password is None or not compare_password(password, account.password, account.password_salt):
+            raise AccountPasswordError("Invalid email or password.")
+
+        if account.status == AccountStatus.PENDING.value:
+            account.status = AccountStatus.ACTIVE.value
+            account.initialized_at = datetime.now(UTC).replace(tzinfo=None)
+
+        db.session.commit()
+
+        return cast(Account, account)
+
+    @staticmethod
+    def authenticate_name(name: str, password: str, invite_token: Optional[str] = None) -> Account:
+        """authenticate account with email and password"""
+
+        account = db.session.query(Account).filter_by(name=name).first()
         if not account:
             raise AccountNotFoundError()
 
@@ -967,6 +1021,16 @@ class TenantService:
         TenantService.check_member_permission(tenant, operator, account, "remove")
 
         ta = db.session.query(TenantAccountJoin).filter_by(tenant_id=tenant.id, account_id=account.id).first()
+        if not ta:
+            raise MemberNotInTenantError("Member not in tenant.")
+
+        db.session.delete(ta)
+        db.session.commit()
+
+    @staticmethod
+    def pbc_remove_member_from_tenant(tenant: Tenant, account: Account) -> None:
+        """Remove member from tenant"""
+        ta = TenantAccountJoin.query.filter_by(tenant_id=tenant.id, account_id=account.id).first()
         if not ta:
             raise MemberNotInTenantError("Member not in tenant.")
 
